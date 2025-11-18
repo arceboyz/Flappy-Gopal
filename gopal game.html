@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Flappy Gopal</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{
+    background:#87CEEB;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+    overflow:hidden;
+    font-family:'Poppins', sans-serif;
+}
+canvas{
+    border:3px solid #222;
+    border-radius:10px;
+    box-shadow:0 0 20px rgba(0,0,0,0.3);
+}
+#score{
+    position:absolute;
+    top:20px;
+    left:50%;
+    transform:translateX(-50%);
+    font-size:32px;
+    color:#fff;
+    font-weight:700;
+    text-shadow:1px 1px 2px rgba(0,0,0,0.5);
+}
+#menu, #gameOverScreen{
+    position:absolute;
+    top:0; left:0;
+    width:100%; height:100%;
+    background:rgba(0,0,0,0.65);
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
+    text-align:center;
+    transition:0.3s;
+}
+button{
+    margin:10px;
+    padding:12px 35px;
+    font-size:22px;
+    border:none;
+    border-radius:12px;
+    cursor:pointer;
+    background:linear-gradient(45deg,#ffba00,#ff8800);
+    color:#222;
+    font-weight:600;
+    transition:0.2s;
+}
+button:hover{
+    transform:scale(1.08);
+    background:linear-gradient(45deg,#ffd633,#ffaa00);
+}
+#settingsMenu{
+    position:absolute;
+    top:0; left:0;
+    width:100%; height:100%;
+    display:none;
+    background:rgba(20,20,30,0.95);
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
+    text-align:center;
+}
+.settings-box{
+    background:#1a1a2e;
+    padding:25px;
+    border-radius:20px;
+    width:350px;
+}
+.settings-title{
+    font-size:32px;
+    margin-bottom:20px;
+    color:#ffcc00;
+    font-weight:700;
+}
+.settings-option{
+    margin:10px 0;
+    font-size:20px;
+    color:#fff;
+}
+.radio-row{
+    display:flex;
+    justify-content:space-between;
+    margin-top:10px;
+}
+.radio-row label{
+    font-size:18px;
+    color:#fff;
+    cursor:pointer;
+}
+#settingsButton{
+    margin-top:20px;
+    padding:12px 25px;
+    font-size:22px;
+    background:#ffcc00;
+    color:#222;
+    font-weight:700;
+}
+#leaderboard{
+    margin-top:15px;
+    font-size:20px;
+    color:#ffcc00;
+}
+</style>
+</head>
+<body>
+
+<div id="score">Score: 0</div>
+
+<div id="menu">
+    <div style="font-size:50px;color:#ffcc00;margin-bottom:20px;font-weight:700;">Flappy Gopal</div>
+    <button id="startBtn">Start Game</button>
+</div>
+
+<div id="settingsMenu">
+    <div class="settings-box">
+        <div class="settings-title">Settings</div>
+        <div class="settings-option">
+            <label><input type="checkbox" id="soundToggle" checked> Sound On/Off</label>
+        </div>
+        <div class="settings-option">Flap Sound</div>
+        <div class="radio-row">
+            <label><input type="radio" name="flapSound" value="GO" checked> GO</label>
+            <label><input type="radio" name="flapSound" value="SAN"> SAN</label>
+            <label><input type="radio" name="flapSound" value="TE"> TE</label>
+        </div>
+        <button id="settingsButton">Close Settings</button>
+    </div>
+</div>
+
+<div id="gameOverScreen" style="display:none;">
+    <div style="font-size:48px;color:#ff4444;margin-bottom:20px;font-weight:700;">Gopal Moro!</div>
+    <div id="finalScore" style="font-size:32px;color:#ffcc00;">Score: 0</div>
+    <div id="leaderboard"></div>
+    <button id="retryBtn">Retry</button>
+    <button id="exitBtn">Exit</button>
+</div>
+
+<canvas id="gameCanvas" width="400" height="600"></canvas>
+
+<script>
+const canvas=document.getElementById("gameCanvas");
+const ctx=canvas.getContext("2d");
+
+const bgImg=new Image(); bgImg.src="assets/background.png";
+const pipeImg=new Image(); pipeImg.src="assets/pipe.png";
+const gopalImg=new Image(); gopalImg.src="assets/gopal.png";
+
+const flapSounds={ "GO": new Audio("assets/flap.mp3"), "SAN": new Audio("assets/san.mp3"), "TE": new Audio("assets/te.mp3")};
+const scoreSound=new Audio("assets/score.mp3");
+const dieSound=new Audio("assets/die.mp3");
+
+let selectedFlap="GO";
+let soundsEnabled=true;
+let leaderboard=[0,0,0];
+
+const bird={x:80,y:300,width:50,height:50,velocity:0,gravity:0.45,jumpPower:-7,maxFall:8,rotation:0};
+let pipes=[];
+let frame=0;
+let score=0;
+let gameOver=false;
+let started=false;
+let waitStart=true;
+let paused=false;
+let particles=[];
+
+// UI
+const menu=document.getElementById("menu");
+const startBtn=document.getElementById("startBtn");
+const gameOverScreen=document.getElementById("gameOverScreen");
+const retryBtn=document.getElementById("retryBtn");
+const exitBtn=document.getElementById("exitBtn");
+const finalScore=document.getElementById("finalScore");
+const settingsMenu=document.getElementById("settingsMenu");
+const soundToggle=document.getElementById("soundToggle");
+const settingsButton=document.getElementById("settingsButton");
+const flapRadios=document.getElementsByName("flapSound");
+const leaderboardDiv=document.getElementById("leaderboard");
+
+// SETTINGS: toggle and pause
+function toggleSettings(){
+    settingsMenu.style.display = settingsMenu.style.display==="flex"?"none":"flex";
+    paused = (settingsMenu.style.display==="flex") || gameOver;
+}
+settingsButton.onclick = toggleSettings;
+soundToggle.onchange=(e)=>soundsEnabled=e.target.checked;
+flapRadios.forEach(r=>r.onchange=()=>selectedFlap=r.value);
+
+// START + RETRY
+function startGame(){
+    bird.y=300; bird.velocity=0; bird.rotation=0; pipes=[]; frame=0; score=0;
+    gameOver=false; waitStart=true; paused=false; started=true;
+    particles=[];
+    menu.style.display="none"; gameOverScreen.style.display="none";
+}
+startBtn.onclick=startGame;
+retryBtn.onclick=startGame;
+exitBtn.onclick=()=>location.reload();
+
+// CONTROLS
+document.addEventListener("keydown",e=>{
+    if(e.code==="KeyS"){ toggleSettings(); return; } 
+    if(!started) return;
+
+    if(gameOver && e.code==="Enter"){ startGame(); return; }
+
+    if(paused || gameOver) return;
+
+    if(e.code==="Space"||e.code==="ArrowUp"){
+        if(waitStart) waitStart=false;
+        bird.velocity=bird.jumpPower;
+        createFlapParticles();
+        if(soundsEnabled){ flapSounds[selectedFlap].currentTime=0; flapSounds[selectedFlap].play(); }
+    }
+});
+
+// PARTICLES
+function createFlapParticles(){
+    for(let i=0;i<6;i++){
+        particles.push({x:bird.x+bird.width/2, y:bird.y+bird.height/2, vx:(Math.random()-0.5)*2, vy:Math.random()*-2, alpha:1});
+    }
+}
+
+// GAME LOOP
+function update(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(bgImg,0,0,canvas.width,canvas.height);
+
+    // update particles
+    particles.forEach(p=>{
+        p.x+=p.vx; p.y+=p.vy; p.alpha-=0.03;
+    });
+    particles=particles.filter(p=>p.alpha>0);
+    particles.forEach(p=>{
+        ctx.fillStyle=`rgba(255,255,0,${p.alpha})`;
+        ctx.beginPath(); ctx.arc(p.x,p.y,3,0,Math.PI*2); ctx.fill();
+    });
+
+    if(started && !paused){
+        if(!waitStart && !gameOver){
+            bird.velocity+=bird.gravity;
+            if(bird.velocity>bird.maxFall) bird.velocity=bird.maxFall;
+            bird.y+=bird.velocity;
+            bird.rotation = Math.min((bird.velocity/10)*30, 90);
+
+            if(frame%90===0){
+                let gapY=Math.random()*200+150;
+                pipes.push({x:canvas.width, y:gapY, passed:false, offset: Math.random()*10});
+            }
+
+            pipes.forEach(pipe=>{
+                pipe.x-=3;
+                pipe.y += Math.sin(frame*0.05 + pipe.offset);
+                drawPipe(pipe);
+                checkScore(pipe);
+                detectCrash(pipe);
+            });
+            pipes=pipes.filter(p=>p.x>-100);
+
+            document.getElementById("score").innerText="Score: "+score;
+            frame++;
+        }
+    }
+
+    // Draw bird with rotation
+    ctx.save();
+    ctx.translate(bird.x+bird.width/2,bird.y+bird.height/2);
+    ctx.rotate(bird.rotation*Math.PI/180);
+    ctx.drawImage(gopalImg,-bird.width/2,-bird.height/2,bird.width,bird.height);
+    ctx.restore();
+
+    requestAnimationFrame(update);
+}
+
+function drawPipe(p){
+    ctx.drawImage(pipeImg,p.x,p.y-400,70,400);
+    ctx.drawImage(pipeImg,p.x,p.y+200,70,400);
+}
+
+function checkScore(p){
+    if(!p.passed && bird.x>p.x+70){
+        p.passed=true; score++;
+        createScoreParticles(p.x+35,p.y); // particle effect on score
+        if(soundsEnabled){ scoreSound.currentTime=0; scoreSound.play(); }
+    }
+}
+
+// Score particle
+function createScoreParticles(x,y){
+    for(let i=0;i<8;i++){
+        particles.push({x:x, y:y, vx:(Math.random()-0.5)*2, vy:(Math.random()-1.5), alpha:1});
+    }
+}
+
+function detectCrash(p){
+    if((bird.x+bird.width>p.x && bird.x<p.x+70 && (bird.y<p.y || bird.y+bird.height>p.y+200)) || bird.y>canvas.height || bird.y<0){
+        if(!gameOver){
+            gameOver=true;
+            paused=true;
+            if(soundsEnabled) dieSound.play();
+            finalScore.innerText="Score: "+score;
+            gameOverScreen.style.display="flex";
+
+            leaderboard.push(score);
+            leaderboard.sort((a,b)=>b-a);
+            leaderboard = leaderboard.slice(0,3);
+            leaderboardDiv.innerHTML = `Leaderboard:<br>1️⃣ ${leaderboard[0]}<br>2️⃣ ${leaderboard[1]}<br>3️⃣ ${leaderboard[2]}`;
+        }
+    }
+}
+
+update();
+</script>
+</body>
+</html>
